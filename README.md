@@ -1,4 +1,7 @@
 # SNN-Evolutionary-Ensemble
+This project would revolve about using an ensemble of various existing bio-inspired algorithms to determine the optimal sets of weights of a
+Spiking Neural Network and evaluating the performance of such an ensemble setting.
+
 ## Training Spiking Neural Networks using an Ensemble of Nature-Inspired Algorithms 
 
 Spiking Neural Networks often called as the third generation of neural networks are bio-inspired ANN
@@ -15,14 +18,15 @@ or bio-inspired algorithms can play an important role during the learning phase 
 swarm optimization algorithms have been used previously to learn the synaptic weights in case of
 Spiking Neural Networks[5].
 Ensemble learning is a technique where multiple learners are used to solve some instance of a problem.
-Ensemble learners have been shown to outperform single classiers [6]. Genetic algorithms have been
+Ensemble learners have been shown to outperform single classifiers [6]. Genetic algorithms have been
 used in the past to determine the optimal set of weights for each learning algorithm in an ensemble
 setting. Ensemble of various bio-inspired algorithms to solve a particular instance has never been
 done before, and hence a mixture of various bio-inspired algorithms to train Spiking Neural Networks
 is an approach that still remains to be investigated. Therefore this project would revolve about using
 an ensemble of various existing bio-inspired algorithms to determine the optimal sets of weights of a
 Spiking Neural Network and evaluating the performance of such an ensemble setting. Three different evolutionary
-algorithms are used 
+algorithms are used which include Real Coded Genetic Algorithm, Differential Evolution and Particle Swarm Optimizer. 
+Results from all these algorithms are combined by majority voting to investigate any improvement in results.
 
 ### References
 [1] S. Thorpe, D. Fize, C. Marlot, Speed of processing in the human visual system. Nature 381

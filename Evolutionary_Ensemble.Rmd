@@ -1,0 +1,658 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  word_document: default
+---
+
+```{r Loading Libraries and Datasets}
+
+library(ggplot2)
+library(caret)
+library(ModelMetrics)
+library(glmnet)
+library(rpart)
+library(rpart.plot)
+library(ggplot2)
+library(ALSM)
+library(Hmisc)
+library(leaps)
+library(car)
+library(ISLR)
+library(gam)
+library(splines)
+library(lspline)
+library(tree)
+library(MASS)
+library(randomForest)
+library(gbm)
+library(fmsb)
+library(corrplot)
+iris <- read.csv("C:/Users/Anirudh Shankar/Desktop/Fall 2019/Thesis/Codes/iris.csv")
+
+```
+
+```{r Train Test Split}
+
+set.seed(123)
+sample_rows<- sample(nrow(iris),size=0.5*nrow(iris),replace=F)
+train<-iris[sample_rows,]
+test<-iris[-sample_rows,]
+
+```
+
+```{r Classification using Multi Class Logistic Regression}
+
+lr_fit <- multinom(variety~.,data=train)
+
+lr_predict_prob <- as.data.frame(predict(lr_fit,newdata=test,"probs"))
+
+lr_predict <- predict(lr_fit,newdata=test)
+
+print(Accuracy(lr_predict,test$variety))
+
+```
+
+
+```{r Classification using Naives Bayes Classifier}
+
+control <- trainControl(method = "repeatedcv", number = 10, savePredictions = TRUE)
+
+model_nb = train(variety~.,'nb',data=train,trControl=control,tuneLength = 10)
+
+nb_pred <- predict(model_nb,newdata = test)
+print(Accuracy(nb_pred,test$variety))
+
+```
+
+
+```{r Classification using KNN}
+
+control <- trainControl(method = "repeatedcv", number = 10, savePredictions = TRUE)
+
+model_knn <- train(variety ~ .,  data=train, method="knn",
+                 trControl = control, tuneLength = 10)
+
+knn_pred <- predict(model_knn,newdata=test)
+print(knn_pred)
+print(Accuracy(knn_pred,test$variety))
+
+```
+
+```{r Classification using Decision Trees}
+
+control <- trainControl(method = "repeatedcv", number = 10, savePredictions = TRUE)
+
+model_tree<- train(variety ~ .,  data=train, method="rpart",
+                 trControl = control, tuneLength = 10)
+
+tree_pred <- predict(model_tree,newdata=test)
+print(tree_pred)
+
+print(Accuracy(tree_pred,test$variety))
+
+```
+
+```{r Classification using Random Forests}
+
+control <- trainControl(method="repeatedcv", number=10, repeats=3,savePredictions = TRUE)
+
+tunegrid <- expand.grid(.mtry=c(1:4), .ntree=c(500, 1000, 1500, 2000))
+
+model_rf <- train(variety~., data=train, method=customRF, metric="Accuracy", tuneGrid=tunegrid, trControl=control)
+#print(model_rf)
+
+rf_pred <- predict(model_rf,newdata=test)
+rf_pred_prob <- predict(model_rf,newdata = test,type = "prob")
+
+print(Accuracy(rf_pred,test$variety))
+
+```
+
+```{r Custom Caret function for RF}
+
+customRF <- list(type = "Classification", library = "randomForest", loop = NULL)
+customRF$parameters <- data.frame(parameter = c("mtry", "ntree"), class = rep("numeric", 2), label = c("mtry", "ntree"))
+customRF$grid <- function(x, y, len = NULL, search = "grid") {}
+customRF$fit <- function(x, y, wts, param, lev, last, weights, classProbs, ...) {
+  randomForest(x, y, mtry = param$mtry, ntree=param$ntree, ...)
+}
+customRF$predict <- function(modelFit, newdata, preProc = NULL, submodels = NULL)
+   predict(modelFit, newdata)
+customRF$prob <- function(modelFit, newdata, preProc = NULL, submodels = NULL)
+   predict(modelFit, newdata, type = "prob")
+customRF$sort <- function(x) x[order(x[,1]),]
+customRF$levels <- function(x) x$classes
+
+```
+
+
+```{r Classification using SVMs}
+
+control <- trainControl(method = "repeatedcv", number = 10, savePredictions = TRUE)
+
+model_svm<- svm(variety ~ .,  data=train,probability=TRUE)
+
+svm_pred <- predict(model_svm,newdata=test)
+svm_pred_prob <- predict(model_svm,test,probability = TRUE)
+
+svm_pred_prob <- head(attr(svm_pred_prob,"probabilities"))
+
+model_svm <- probsvm(x=train[,c(1:4)],y = train$variety,type="ovo", Inum=10,fold=2,lambdas=2^seq(-10,10,by=3))
+
+svm_pred <- predict(model_svm,test[,c(1:4)])
+svm_pred_prob <- as.data.frame(svm_pred$pred.prob)
+
+print(Accuracy(svm_pred$pred.y,test$variety))
+
+```
+
+```{r Classification using GBMs}
+
+control <- trainControl(method = "repeatedcv", number = 10, savePredictions = TRUE)
+
+gbmGrid <-  expand.grid(interaction.depth = c(1, 5, 9), 
+                        n.trees = (5:20)*50, 
+                        shrinkage = 0.1,
+                        n.minobsinnode = 10)
+
+model_gbm <- train(variety ~ ., data = train, 
+                 method = "gbm", 
+                 trControl = control, 
+                 tuneGrid = gbmGrid)
+
+print(model_gbm$results)
+
+gbm_pred <- predict(model_gbm,newdata=test)
+gbm_pred_prob <- predict(model_gbm,newdata = test,type = "prob")
+
+print(Accuracy(gbm_pred,test$variety))
+
+```
+
+```{r Convert Predictions to Numbers}
+
+knn_pred <- as.numeric(knn_pred)
+tree_pred <- as.numeric(tree_pred)
+rf_pred <- as.numeric(rf_pred)
+svm_pred <- as.numeric(svm_pred)
+gbm_pred <- as.numeric(gbm_pred)
+
+classifier_list <- list(knn_pred,tree_pred,rf_pred,svm_pred,gbm_pred)
+
+classifier_list_prob <- list(nb_pred_prob,knn_pred_prob,lr_predict_prob,tree_pred_prob,rf_pred_prob,gbm_pred_prob,svm_pred_prob)
+
+```
+
+```{r Genetic Algorithm}
+
+genetic_algorithm <- function(pop_size,mut,num_epochs)
+{
+  
+  population <- list()
+  mean_accuracy <- c()
+  for (i in 1:pop_size)
+  {
+    p <- round(runif(5,0,1),0)
+    population[[i]] <- p
+  }
+  
+  fitness_values <- c()
+  for (i in 1:pop_size)
+  {
+    fitness_values[i] <- fitness(population[[i]])
+  }
+  children <- list()
+  for (epochs in 1:num_epochs)
+  {
+    index <- sort(fitness_values,decreasing = TRUE,index.return = TRUE)$ix
+    index <- index[1:2]
+    population_best <- population[index]
+    
+    # Create children 
+    rand_number <- round(runif(1,1,5),0)
+    j = 2
+    for (i in 1:2)
+    {
+      children[[i]]<- c(population_best[[i]][1:rand_number],population_best[[j]][rand_number+1:5])
+      j = j-1
+      children[[i]]<- children[[i]][1:5]
+    }
+    
+    # Mutate children
+    rand_number <- runif(1,0,1)
+    for (i in 1:2)
+    {
+      for (j in 1:5)
+      {
+        if(rand_number<=mut)
+        {
+          children[[i]][j]<- flip_bit(children[[i]][j])
+        }
+      }
+    }
+    
+    population <- c(population,children)
+    pop_size <- length(population)
+    for (i in 1:pop_size)
+    {
+      fitness_values[i] <- fitness(population[[i]])
+    }
+    # Randomly remove 2 out of worst half
+    
+    index <- sort(fitness_values,decreasing = TRUE,index.return = TRUE)$ix
+    index <- index[c(sample(pop_size/2,2))]
+    
+    population <- population[-index]
+    
+    for (i in 1:length(population))
+    {
+      fitness_values[i] <- fitness(population[[i]])
+    }
+    
+    mean_accuracy[epochs] <- max(fitness_values)
+    print_line <- paste("Generation Number: ",epochs," ","Fitness Value: ",mean_accuracy[epochs])
+    
+    writeLines(print_line)   
+    
+  }
+  return(1)
+}
+
+
+```
+
+```{r}
+
+fitness <- function(pop)
+{
+  index <- which(pop==1)
+  if(length(index)!=0)
+  {
+  C <- classifier_list[index]
+  vec <- c()
+  list_for_mode <- list()
+  for (i in 1:length(C[[1]]))
+  {
+    for (j in 1:length(index))
+    {
+      vec <- append(vec,C[[j]][i]) 
+    }
+    list_for_mode[[i]] <- vec
+    vec <- c()
+  }
+  new_vec <- c()
+  
+  for (i in 1:length(list_for_mode))
+  {
+    new_vec[i] <- mode_data(list_for_mode[[i]]) 
+  }
+  accuracy <- Accuracy(new_vec,as.numeric(test$variety))
+  }
+  else
+  {
+    accuracy <- 0
+  }
+  return(accuracy)
+}
+```
+
+
+```{r Real Coded Genetic Algorithm}
+
+real_genetic_algorithm <- function(pop_size,mut,num_epochs)
+{
+  population <- list()
+  mean_accuracy <- c()
+  max_accuracy <- c()
+  
+  for (i in 1:pop_size)
+  {
+    p <- runif(7,0,1)
+    p <- p/sum(p) # Ensuring that the sum goes to 1 since we will take a weighted average
+    population[[i]] <- p
+  }
+  
+  fitness_values <- c()
+  for (i in 1:pop_size)
+  {
+    fitness_values[i] <- fitness(population[[i]])
+  }
+  children <- list()
+  for (epochs in 1:num_epochs)
+  {
+    index <- sort(fitness_values,decreasing = TRUE,index.return = TRUE)$ix
+    index <- index[1:2]
+    worst_index <- index[length(index)]
+    population_best <- population[index]
+    
+    # Create children 
+    
+    child_1 <- 0.5*population_best[[1]] + 0.5*population_best[[2]]
+    child_2 <- 1.5*population_best[[1]] - 0.5*population_best[[2]]
+    child_3 <- 1.5*population_best[[2]] - 0.5*population_best[[2]]
+    
+    # Mutate children
+    best_solution <- population_best[[1]]
+    worst_solution <- population[[worst_index]]
+    
+    #print("Best Solution:")
+    #print(best_solution)
+    #print("Worst Solution")
+    #print(worst_solution)
+    
+    rand_number <- runif(1,0,1)
+    if(rand_number<=0.5)
+    {
+      tau <- 1
+    }
+    else
+    {
+      tau <- -1
+    }
+    
+    b <- 1
+    d <- (1-(epochs/num_epochs))^b
+    
+    rand_number <- runif(1,0,1)
+    child_1 <- child_1 + tau*(best_solution-worst_solution)*(1-rand_number^d)
+    child_2 <- child_2 + tau*(best_solution-worst_solution)*(1-rand_number^d)
+    child_3 <- child_3 + tau*(best_solution-worst_solution)*(1-rand_number^d)
+    
+    child_1[child_1<=0] = 0
+    child_2[child_2<=0] = 0
+    child_3[child_3<=0] = 0
+    
+    if(sum(child_1)>1)
+    {
+      child_1 <- child_1/sum(child_1)
+    }
+    if(sum(child_2)>1)
+    {
+      child_2 <- child_2/sum(child_2)
+    }
+    if(sum(child_3)>1)
+    {
+      child_3 <- child_3/sum(child_3)
+    }
+    
+    child <- list()
+    child <- list.append(child,child_1,child_2,child_3)
+    
+    population <- c(population,child)
+    
+    #print("children")
+    #print(child)
+    
+    pop_size <- length(population)
+    for (i in 1:pop_size)
+    {
+      fitness_values[i] <- fitness(population[[i]])
+    }
+    
+    # Randomly remove 3 out of worst half
+    
+    index <- sort(fitness_values,decreasing = TRUE,index.return = TRUE)$ix
+    index <- index[c(sample(pop_size/2,3))]
+    
+    #print(index)
+    population <- population[-index]
+    #print(population)
+    
+    for (i in 1:length(population))
+    {
+      fitness_values[i] <- fitness(population[[i]])
+    }
+    
+    mean_accuracy[epochs] <- mean(fitness_values)
+    max_accuracy[epochs] <- max(fitness_values)
+    print_line <- paste("Generation Number: ",epochs," ","Fitness Value: ",mean_accuracy[epochs])
+    
+    writeLines(print_line)   
+    
+  }
+  return(list(Fitness = fitness_values,Mean_Fitness = mean_accuracy,Max_Fitness = max_accuracy,Weights = population))
+}
+
+
+```
+
+```{r}
+
+fitness <- function(pop)
+{
+  index <- which(pop==1)
+  if(length(index)!=0)
+  {
+  C <- classifier_list[index]
+  vec <- c()
+  list_for_mode <- list()
+  for (i in 1:length(C[[1]]))
+  {
+    for (j in 1:length(index))
+    {
+      vec <- append(vec,C[[j]][i]) 
+    }
+    list_for_mode[[i]] <- vec
+    vec <- c()
+  }
+  new_vec <- c()
+  
+  for (i in 1:length(list_for_mode))
+  {
+    new_vec[i] <- mode_data(list_for_mode[[i]]) 
+  }
+  accuracy <- Accuracy(new_vec,as.numeric(test$variety))
+  }
+  else
+  {
+    accuracy <- 0
+  }
+  return(accuracy)
+}
+```
+
+
+```{r Fitness Function for Soft Voting}
+
+fitness <- function(pop)
+{
+  index <- which(pop==1)
+  if(length(index)!=0)
+  {
+  C <- classifier_list_prob[index]
+  vec <- c()
+  acc <- soft_fitness(C)
+  }
+  else
+  {
+    acc <- 0
+  }
+  return(acc)
+}
+
+```
+
+
+```{r Mode Function}
+
+mode_data <- function(x)
+{
+  ux <- unique(x)
+  m <- ux[which.max(tabulate(match(x, ux)))]
+  return(m)
+}
+
+```
+
+```{r Soft Classification Fitness Function}
+
+soft_fitness <- function(x)
+{
+  sum <- 0
+  for (i in 1:length(x))
+  {
+    sum <- sum + as.matrix(x[[i]])
+  }
+  avg_class <- sum/length(x)
+  avg_class <- as.data.frame(avg_class)
+  
+  colnames(avg_class) <- c("Setosa","Versicolor","Virginica")
+  
+  pred <- colnames(as.data.frame(avg_class))[apply(as.data.frame(avg_class),1,which.max)]
+  
+  acc <- Accuracy(pred,test$variety)
+  return(acc)
+}
+
+```
+
+```{r Fitness Function for Soft Voting with Real weights}
+
+fitness <- function(pop)
+{
+  sum <- 0
+  for (i in 1:length(classifier_list_prob))
+  {
+     sum <- sum + classifier_list_prob[[i]]*pop[i]
+  }
+  sum <- as.data.frame(sum)
+  colnames(sum) <- c("Setosa","Versicolor","Virginica")
+  
+  pred <- colnames(as.data.frame(sum))[apply(as.data.frame(sum),1,which.max)]
+  
+  acc <- Accuracy(pred,test$variety)
+  return(acc)
+}
+
+```
+
+
+```{r}
+flip_bit <- function(x) # Function to flip bits of solution string
+{
+    if(x==0)
+    {
+      return(1)
+    }
+    else
+    {
+      return(0)
+    }
+}
+  
+
+```
+
+
+```{r Graphs for RCGA}
+
+rcga_results <- real_genetic_algorithm(20,0,1000)
+
+df <- as.data.frame(rcga_results$Mean_Fitness)*100
+df$Iteration <- c(1:1000)
+df$Max_Fitness <- rcga_results$Max_Fitness*100
+
+df <- df[,c(2,1,3)]
+colnames(df) <- c("Iteration","Mean_Fitness","Max_Fitness")
+
+df <- melt(df,id.vars = "Iteration")
+
+g <- ggplot(df,aes(Iteration,value,color = variable)) + geom_line() + ggtitle("Convergence Plot of Ensemble Learning using Real Coded Genetic Algorithms") + xlab("Iterations") + ylab("Accuracy (%) ")+theme(plot.title = element_text(hjust = 0.5))+scale_x_continuous(breaks = seq(0,1000,100))+labs("Metrics")+ scale_color_manual(labels = c("Mean Population Fitness", "Max Population Fitness"), values = c("blue", "red"))
+
+```
+
+
+
+```{r Differential Evolution}
+
+de <- function(pop_size,str_length,mut,crossp,num_epochs)
+{
+  # Create a population of solutions
+  population <- list()
+  fitness_values <- c()
+  mean_accuracy <- c()
+  max_accuracy <- c()
+  
+  for (i in 1:pop_size)
+  {
+    p <- runif(str_length,0,1)
+    p <- p/sum(p)
+    population[[i]] <- p
+  }
+  
+  # Calculating Fitness Values
+
+  for (i in 1:pop_size)
+  {
+    fitness_values[i] <- fitness(population[[i]])
+  }
+    
+  # Randomly select 3 solutions and repeat for each solution 
+  
+  for (epochs in 1:num_epochs)
+  {
+    for (i in 1:pop_size)
+    {
+      index <- sample(pop_size,3)
+    
+      a <- population[[index[1]]]
+      b <- population[[index[2]]]
+      c <- population[[index[3]]]
+    
+      mutant <- a + mut*(b-c)
+    
+      mutant[mutant<0] <- 0
+      if(sum(mutant)>1)
+      {
+        mutant <- mutant/sum(mutant)
+      }
+      
+      # Generate indexes for mutation
+      
+      index <- r_sample_logical(str_length,prob = c(1-crossp,crossp))
+      index <- which(index==TRUE)
+      
+      new_solution <- population[[i]]
+      new_solution[index] <- mutant[index]
+      
+      new_fitness <- fitness(new_solution)
+      
+      if(new_fitness > fitness_values[i])
+      {
+        fitness_values[i] <- new_fitness
+        population[[i]] <- new_solution
+      }
+    }
+    mean_accuracy[epochs] <- mean(fitness_values)
+    max_accuracy[epochs] <- max(fitness_values)
+    print_line <- paste("Generation Number: ",epochs," ","Fitness Value: ",mean_accuracy[epochs])
+    
+    writeLines(print_line) 
+  }
+  return(list(Fitness = fitness_values,Mean_Fitness = mean_accuracy,Max_Fitness = max_accuracy,Weights = population))
+}
+
+```
+
+```{r Graphs for Differential Evolution}
+
+de_results <- de(10,7,0.5,0.5,100)
+
+df <- as.data.frame(de_results$Mean_Fitness)*100
+df$Iteration <- c(1:100)
+df$Max_Fitness <- de_results$Max_Fitness*100
+
+df <- df[,c(2,1,3)]
+colnames(df) <- c("Iteration","Mean_Fitness","Max_Fitness")
+
+df <- melt(df,id.vars = "Iteration")
+
+g <- ggplot(df,aes(Iteration,value,color = variable)) + geom_line() + ggtitle("Convergence Plot of Ensemble Learning using Differential Evolution") + xlab("Iterations") + ylab("Accuracy (%) ")+theme(plot.title = element_text(hjust = 0.5))+scale_x_continuous(breaks = seq(0,100,10))+labs("Metrics")+ scale_color_manual(labels = c("Mean Population Fitness", "Max Population Fitness"), values = c("blue", "red"))
+
+```
+
+
+
